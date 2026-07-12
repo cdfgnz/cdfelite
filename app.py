@@ -103,9 +103,19 @@ elif page == "Stats Dashboard":
     fig_scatter.update_layout(paper_bgcolor="#0f1116", plot_bgcolor="#161920", font_color="white")
     st.plotly_chart(fig_scatter, use_container_width=True)
 
-# --- PLAYER COMPARISON ---
+# --- PLAYER COMPARISON (LÍNEA ACORTADA TOTALMENTE FIABLE) ---
 elif page == "Player Comparison":
     st.title("⚖️ Player Comparison")
     p1 = st.selectbox("Select Player 1:", df_db["Player"].unique(), index=0)
     p2 = st.selectbox("Select Player 2:", df_db["Player"].unique(), index=1)
-    st.dataframe(df_db[df_db["Player"].isin([p1, p2])], use_container
+    comparison_data = df_db[df_db["Player"].isin([p1, p2])]
+    st.dataframe(comparison_data, use_container_width=True)
+
+# --- PLAYER SCOUT REPORT ---
+elif page == "Player Scout Report":
+    st.title("🔍 Player Scout Report")
+    target_player = st.selectbox("Select Player to Analyze:", df_db["Player"].unique())
+    
+    col_v1, col_v2 = st.columns([1, 2])
+    with col_v1:
+        chart_style = st.radio("Visualization
