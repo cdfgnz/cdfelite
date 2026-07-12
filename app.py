@@ -4,7 +4,6 @@ import numpy as np
 import plotly.express as px
 import os
 import urllib.request
-import matplotlib.pyplot as plt
 
 # 1. VERIFICACIÓN DE LIBRERÍAS
 try:
@@ -14,9 +13,10 @@ except ImportError:
     st.stop()
 
 try:
+    import matplotlib.pyplot as plt
     from mplsoccer import PyPizza
 except ImportError:
-    st.error("Falta 'mplsoccer'.")
+    st.error("Falta 'mplsoccer' o 'matplotlib'.")
     st.stop()
 
 # 2. CONFIGURACIÓN VISUAL
@@ -80,10 +80,21 @@ def load_football_data():
         
         return df
     except Exception as e:
+        # CORREGIDO: Línea ultra corta sin f-strings propensas a romperse
         err_msg = str(e)
         st.sidebar.error("Error base de datos remota:")
         st.sidebar.warning(err_msg)
-        return pd.DataFrame({"Player": ["Vinicius Jr"], "Team": ["Real Madrid"], "Position": ["FW"], "Market Value (€)": [150000000], "Goals p90": [0.4], "Assists p90": [0.3], "xG p90": [0.3], "SCA p90": [3.0], "Prog Carries": [2.0], "Box Touches": [3.0], "Rating Index": [80.0]})
+        return pd.DataFrame({
+            "Player": ["Vinicius Jr", "Erling Haaland"],
+            "Team": ["Real Madrid", "Manchester City"],
+            "Position": ["Left Winger", "Center-Forward"],
+            "Market Value (€)": [150000000, 180000000],
+            "Highest Value (€)": [150000000, 180000000],
+            "Goals p90": [0.40, 0.86], "Assists p90": [0.32, 0.37],
+            "xG p90": [0.31, 0.47], "SCA p90": [3.10, 4.25],
+            "Prog Carries": [2.33, 6.74], "Box Touches": [3.73, 5.97],
+            "Rating Index": [85.0, 92.5]
+        })
 
 df_db = load_football_data()
 
@@ -91,10 +102,14 @@ df_db = load_football_data()
 st.sidebar.title("Navigation")
 menu = ["🏠 Home", "📊 Stats Dashboard", "⚖️ Player Comparison", "🔍 Player Scout Report", "🧬 Player Clone", "🕵️‍♂️ Player Profiler", "🧠 Player Performance Index", "📂 Player Screener"]
 choice = st.sidebar.radio("Go to:", menu)
+st.sidebar.markdown("---")
+st.sidebar.caption(f"📊 base de datos: {len(df_db)} jugadores.")
 
 # --- MÓDULOS ---
 if choice == "🏠 Home":
     st.title("⚽ cdfelite Analytics")
+    st.markdown("##### *Welcome to your ultimate intelligence football hub.*")
+    st.markdown("---")
     st.dataframe(df_db.head(15), use_container_width=True)
 
 elif choice == "📊 Stats Dashboard":
@@ -106,4 +121,57 @@ elif choice == "📊 Stats Dashboard":
     fig.update_layout(paper_bgcolor="#0f1116", plot_bgcolor="#161920", font_color="white")
     st.plotly_chart(fig, use_container_width=True)
 
-elif
+elif choice == "⚖️ Player Comparison":
+    st.title("⚖️ Player Comparison")
+    players = sorted(df_db["Player"].unique())
+    p1 = st.selectbox("Jugador 1:", players, index=0)
+    p2 = st.selectbox("Jugador 2:", players, index=min(1, len(players)-1))
+    st.dataframe(df_db[df_db["Player"].isin([p1, p2])], use_container_width=True)
+
+elif choice == "🔍 Player Scout Report":
+    st.title("🔍 Player Scout Report")
+    target = st.selectbox("Player:", sorted(df_db["Player"].unique()))
+    p_data = df_db[df_db["Player"] == target].iloc[0]
+    
+    m_pizza = ['Goals p90', 'Assists p90', 'xG p90', 'SCA p90', 'Prog Carries', 'Box Touches']
+    
+    vals = []
+    for m in m_pizza:
+        val_ins = float(p_data[m])
+        calculated = int(val_ins * 100) if val_ins <= 1 else int(val_ins * 10)
+        vals.append(max(0, min(100, calculated)))
+    
+    baker = PyPizza(params=m_pizza, background_color="#161920", straight_line_color="#22252c", straight_line_lw=1, last_circle_lw=1, other_circle_lw=1, other_circle_color="#22252c")
+    
+    fig, ax = baker.make_pizza(
+        values=vals, 
+        figsize=(6, 6), 
+        slice_colors=["#00ffcc"]*6, 
+        value_colors=["#0f1116"]*6, 
+        text_props=dict(color="white", fontsize=10, weight="bold")
+    )
+    fig.patch.set_facecolor('#0f1116')
+    st.pyplot(fig)
+
+elif choice == "🧬 Player Clone":
+    st.title("🧬 Player Clone Engine")
+    target = st.selectbox("Clones para:", sorted(df_db["Player"].unique()))
+    p_data = df_db[df_db["Player"] == target].iloc[0]
+    clones = df_db[df_db["Player"] != target].copy()
+    clones["Similarity Diff"] = (clones["Goals p90"] - p_data["Goals p90"]).abs() + (clones["Assists p90"] - p_data["Assists p90"]).abs()
+    st.dataframe(clones.sort_values(by="Similarity Diff").head(10), use_container_width=True)
+
+elif choice == "🕵️‍♂️ Player Profiler":
+    st.title("🕵️‍♂️ Player Profiler")
+    st.dataframe(df_db[["Player", "Team", "Position", "Market Value (€)", "Rating Index"]], use_container_width=True)
+
+elif choice == "🧠 Player Performance Index":
+    st.title("🧠 Player Performance Index")
+    st.dataframe(df_db.sort_values(by="Rating Index", ascending=False), use_container_width=True)
+
+elif choice == "📂 Player Screener":
+    st.title("📂 Player Screener")
+    max_val = int(df_db["Market Value (€)"].max())
+    min_val = int(df_db["Market Value (€)"].min())
+    budget = st.slider("Presupuesto Máximo (€):", min_val, max_val, int(max_val * 0.3), step=500000)
+    st.dataframe(df_db[df_db["Market Value (€)"] <= budget].sort_values(by="Market Value (€)", ascending=False), use_container_width=True)
