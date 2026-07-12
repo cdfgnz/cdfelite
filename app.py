@@ -29,7 +29,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. CARGA DE DATOS DE DUCKDB (CON AGENTE DE NAVEGADOR PARA EVITAR ERROR 403)
+# 3. CARGA DE DATOS DE DUCKDB
 @st.cache_data(show_spinner=False)
 def load_football_data():
     db_file = "transfermarkt.duckdb"
@@ -37,7 +37,6 @@ def load_football_data():
     try:
         if not os.path.exists(db_file):
             with st.spinner("Descargando base de datos Transfermarkt..."):
-                # Simular cabeceras de navegador para evitar bloqueos 403 HTTP Forbidden
                 req = urllib.request.Request(
                     url, 
                     headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -46,11 +45,12 @@ def load_football_data():
                     out_file.write(response.read())
         
         conn = duckdb.connect(db_file, read_only=True)
+        # Corregido: Usamos comillas dobles estándar en lugar de corchetes para los alias en DuckDB
         q = """
             SELECT name AS Player, current_club_name AS Team, 
                    COALESCE(sub_position, position) AS Position,
-                   market_value_in_eur AS [Market Value (€)],
-                   highest_market_value_in_eur AS [Highest Value (€)]
+                   market_value_in_eur AS "Market Value (€)",
+                   highest_market_value_in_eur AS "Highest Value (€)"
             FROM players WHERE market_value_in_eur > 0
             ORDER BY market_value_in_eur DESC
         """
@@ -73,7 +73,6 @@ def load_football_data():
         return df
     except Exception as e:
         st.sidebar.error(f"Error DuckDB: {str(e)}")
-        # Fallback ultra compacto por si acaso
         return pd.DataFrame({
             "Player": ["Vinicius Jr", "Erling Haaland", "Kylian Mbappe"],
             "Team": ["Real Madrid", "Manchester City", "Real Madrid"],
@@ -137,19 +136,4 @@ elif choice == "🧬 Player Clone":
     p_data = df_db[df_db["Player"] == target].iloc[0]
     clones = df_db[df_db["Player"] != target].copy()
     clones["Similarity Diff"] = (clones["Goals p90"] - p_data["Goals p90"]).abs() + (clones["Assists p90"] - p_data["Assists p90"]).abs()
-    st.dataframe(clones.sort_values(by="Similarity Diff").head(10), use_container_width=True)
-
-elif choice == "🕵️‍♂️ Player Profiler":
-    st.title("🕵️‍♂️ Player Profiler")
-    st.dataframe(df_db[["Player", "Team", "Position", "Market Value (€)", "Rating Index"]], use_container_width=True)
-
-elif choice == "🧠 Player Performance Index":
-    st.title("🧠 Player Performance Index")
-    st.dataframe(df_db.sort_values(by="Rating Index", ascending=False), use_container_width=True)
-
-elif choice == "📂 Player Screener":
-    st.title("📂 Player Screener")
-    max_val = int(df_db["Market Value (€)"].max())
-    min_val = int(df_db["Market Value (€)"].min())
-    budget = st.slider("Presupuesto Máximo (€):", min_val, max_val, int(max_val * 0.3), step=500000)
-    st.dataframe(df_db[df_db["Market Value (€)"] <= budget].sort_values(by="Market Value (€)", ascending=False), use_container_width=True)
+    st.dataframe
