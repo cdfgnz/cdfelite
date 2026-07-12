@@ -72,4 +72,12 @@ def load_football_data():
         df.loc[is_def, 'Goals p90'] = np.random.uniform(0.0, 0.04, n_def).round(4)
         df.loc[is_def, 'xG p90'] = np.random.uniform(0.0, 0.04, n_def).round(4)
         
-        df['Rating Index'] = ((df['Goals p90']*40) + (df['Assists p90']*30) + (df
+        # Fórmula rota corregida y dividida en partes cortas indestructibles
+        part1 = df['Goals p90'] * 40
+        part2 = df['Assists p90'] * 30
+        part3 = df['SCA p90'] * 30
+        df['Rating Index'] = (part1 + part2 + part3).round(1)
+        
+        return df
+    except Exception as e:
+        st.sidebar.error(f"Error DuckDB: {
