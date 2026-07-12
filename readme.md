@@ -50,7 +50,7 @@ Football isn’t just a game—it’s a world of numbers, patterns, and hidden i
 
 **cdfelite** is built to evolve. If you are a professional club, scout, or agency looking for custom metric integrations, proprietary data pipelines, or collaboration, get in touch:
 
-* 💼 **LinkedIn:** [Tu Nombre / Perfil]
+* 💼 **LinkedIn:** 
 * 🐦 **Twitter / X:** [@cdfgnz](https://x.com/cdfgnz)
-* 📧 **Email:** [tu.correo@email.com]
+* 📧 **Email:**
 * 🌐 **Live Platform:** [cdfelite.streamlit.app](https://cdfelite.streamlit.app/)
