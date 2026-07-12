@@ -141,6 +141,9 @@ elif choice == "🔍 Player Scout Report":
         calculated = int(val_ins * 100) if val_ins <= 1 else int(val_ins * 10)
         vals.append(max(0, min(100, calculated)))
     
+    # AQUÍ METES LAS LÍNEAS DE LIMPIEZA
+    plt.close('all') 
+    
     baker = PyPizza(params=m_pizza, background_color="#161920", straight_line_color="#22252c", straight_line_lw=1, last_circle_lw=1, other_circle_lw=1, other_circle_color="#22252c")
     
     fig, ax = baker.make_pizza(
@@ -152,6 +155,9 @@ elif choice == "🔍 Player Scout Report":
     )
     fig.patch.set_facecolor('#0f1116')
     st.pyplot(fig)
+    
+    # Y AQUÍ LA OTRA
+    plt.close(fig)
 
 elif choice == "🧬 Player Clone":
     st.title("🧬 Player Clone Engine")
