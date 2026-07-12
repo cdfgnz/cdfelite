@@ -129,7 +129,15 @@ elif choice == "🔍 Player Scout Report":
     vals = [int(float(p_data[m])*100) if float(p_data[m])<=1 else int(float(p_data[m])*10) for m in m_pizza]
     
     baker = PyPizza(params=m_pizza, background_color="#161920", straight_line_color="#22252c", straight_line_lw=1, last_circle_lw=1, other_circle_lw=1, other_circle_color="#22252c")
-    fig, ax = baker.make_pizza(values=vals, figsize=(6, 6), slice_colors=["#00ffcc"]*6, value_colors=["#0f1116"]*6, value_bck_colors=["#00ffcc"]*6, text_props=dict(color="white", fontsize=10, weight="bold"))
+    
+    # CORREGIDO: Eliminamos el parámetro problemático value_bck_colors para asegurar compatibilidad total
+    fig, ax = baker.make_pizza(
+        values=vals, 
+        figsize=(6, 6), 
+        slice_colors=["#00ffcc"]*6, 
+        value_colors=["#0f1116"]*6, 
+        text_props=dict(color="white", fontsize=10, weight="bold")
+    )
     fig.patch.set_facecolor('#0f1116')
     st.pyplot(fig)
 
