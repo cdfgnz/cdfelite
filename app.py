@@ -1,11 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import plotly.express as px
 from mplsoccer import Radar, PyPizza
 
-# 1. CONFIGURACIÓN DE PÁGINA Y ESTILO VISUAL PREMIUM
+# 1. CONFIGURACIÓN DE LA PLATAFORMA
 st.set_page_config(page_title="cdfelite | Global Football Intelligence", layout="wide")
 
 st.markdown("""
@@ -13,64 +12,70 @@ st.markdown("""
     .stApp { background-color: #0f1116; color: #ffffff; }
     [data-testid="stSidebar"] { background-color: #161920 !important; }
     h1, h2, h3, h4 { color: #00ffcc !important; font-family: 'Inter', sans-serif; font-weight: 800; }
-    .module-card {
-        background-color: #1c212c; padding: 20px; border-radius: 12px;
-        border-left: 5px solid #00ffcc; margin-bottom: 15px;
-    }
+    .stSelectbox, .stSlider { color: black; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. MOTOR DE CARGA MASIVA - CONEXIÓN REAL A LA BASE DE DATOS COMPLETA DE FBREF
+# 2. CONEXIÓN DIRECTA A DATOS REALES DE FBREF (WORLDFOOTBALLR PIPELINE)
 @st.cache_data
-def load_massive_fbref_database():
-    # Repositorio público estable con el dataset estándar de jugadores de FBref (Big Data de Fútbol)
-    url = "https://raw.githubusercontent.com/griffisanalytics/soccer_code/main/fbref-data/t5-leagues/22-23/t5_player_standard.csv"
+def load_real_fbref_data():
+    # Repositorio oficial de almacenamiento de estadísticas de las 5 grandes ligas de la temporada reciente
+    url = "https://raw.githubusercontent.com/JaseZiv/worldfootballR_data/master/raw-data/fbref-data/big_5_advanced_comps.csv"
     try:
-        df = pd.read_csv(url)
-        # Limpieza de nombres corruptos generados por el volcado original de FBref
+        # Cargamos el dataset masivo real
+        df = pd.read_csv(url, low_memory=False)
+        
+        # Filtrar solo por la temporada más reciente disponible en el volcado
+        if 'Season_End_Year' in df.columns:
+            latest_season = df['Season_End_Year'].max()
+            df = df[df['Season_End_Year'] == latest_season]
+            
+        # Nos aseguramos de limpiar los nombres de los jugadores (FBref a veces añade hashes o caracteres tras la barra)
         df['Player'] = df['Player'].str.split('\\').str[0]
         
-        # Filtramos y renombramos las columnas analíticas principales
-        df_clean = df[['Player', 'Squad', 'Comp', 'Pos', 'Age', '90s', 'Gls', 'Ast', 'Sh', 'PasProg', 'Carries']].dropna()
-        df_clean.columns = ['Player', 'Team', 'League', 'Position', 'Age', '90s', 'Goals', 'Assists', 'Shots', 'Prog Passes', 'Prog Carries']
+        # Agrupamos y renombramos métricas estándar por 90 minutos reales
+        # Mapeamos columnas típicas de estadísticas estandarizadas de worldfootballR
+        rename_dict = {
+            'Player': 'Player', 'Squad': 'Team', 'Comp': 'League', 'Pos': 'Position', 'Age': 'Age', 'Mins_Per_90': '90s',
+            'Goals_Goals': 'Goals p90', 'Assists_Assists': 'Assists p90', 'Shots_total_Standard': 'Shots p90',
+            'PasProg': 'Prog Passes p90', 'Carries_Prog': 'Prog Carries p90'
+        }
         
-        # Filtrar jugadores testimoniales (mínimo haber jugado 2.0 partidos completos)
-        df_clean = df_clean[df_clean['90s'] >= 2.0].reset_index(drop=True)
+        # En caso de que las columnas varíen según la última actualización del repositorio, buscamos alternativas seguras:
+        avail_cols = {}
+        for k, v in rename_dict.items():
+            match = [c for c in df.columns if k.lower() in c.lower()]
+            if match:
+                avail_cols[match[0]] = v
+                
+        df_filtered = df[list(avail_cols.keys())].copy()
+        df_filtered.rename(columns=avail_cols, inplace=True)
         
-        # Transformar métricas absolutas a valores por 90 minutos exactos (Estilo FBref oficial)
-        for col in ['Goals', 'Assists', 'Shots', 'Prog Passes', 'Prog Carries']:
-            df_clean[col + " p90"] = (df_clean[col] / df_clean['90s']).round(2)
+        # Eliminar duplicados si un jugador cambió de equipo a mitad de temporada
+        df_filtered = df_filtered.drop_duplicates(subset=['Player'], keep='first')
+        
+        # Limpieza de valores nulos y filtrado por minutos mínimos reales (más de 3 partidos jugados completos)
+        if '90s' in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered['90s'] >= 3.0]
             
-        return df_clean[['Player', 'Team', 'League', 'Position', 'Age', 'Goals p90', 'Assists p90', 'Shots p90', 'Prog Passes p90', 'Prog Carries p90']]
-    except Exception:
-        # PLAN DE RESPALDO: Si GitHub o la URL externa fallan, creamos un ecosistema masivo de 500 jugadores reales
-        np.random.seed(42)
-        pool_players = ["Vinicius Jr", "Haaland", "Mbappe", "Bellingham", "Rodri", "Yamal", "Lewandowski", "Salah", "Saka", "Odegaard", "Palmer", "Kane", "Wirtz", "Musiala", "Foden", "De Bruyne", "Lautaro", "Leao", "Griezmann", "Messi", "Ronaldo"]
-        pool_teams = ["Real Madrid", "Man City", "PSG", "Barcelona", "Bayern Munich", "Arsenal", "Liverpool", "Chelsea", "Inter Milan", "AC Milan", "Atletico Madrid"]
-        pool_leagues = ["La Liga", "Premier League", "Serie A", "Bundesliga", "Ligue 1"]
-        pool_positions = ["FW", "MF", "DF"]
-        
-        massive_data = []
-        for i in range(500):
-            p_base = pool_players[i % len(pool_players)]
-            p_name = f"{p_base} ({10 + i})" if i >= len(pool_players) else p_base
-            massive_data.append({
-                "Player": p_name,
-                "Team": pool_teams[np.random.randint(0, len(pool_teams))],
-                "League": pool_leagues[np.random.randint(0, len(pool_leagues))],
-                "Position": pool_positions[np.random.randint(0, len(pool_positions))],
-                "Age": int(np.random.randint(17, 38)),
-                "Goals p90": float(np.random.uniform(0.0, 0.95)),
-                "Assists p90": float(np.random.uniform(0.0, 0.55)),
-                "Shots p90": float(np.random.uniform(0.5, 4.8)),
-                "Prog Passes p90": float(np.random.uniform(1.0, 7.5)),
-                "Prog Carries p90": float(np.random.uniform(0.5, 8.2))
-            })
-        return pd.DataFrame(massive_data).round(2)
+        # Asegurar valores numéricos correctos en métricas de rendimiento
+        metric_cols = [c for c in df_filtered.columns if 'p90' in c]
+        for col in metric_cols:
+            df_filtered[col] = pd.to_numeric(df_filtered[col], errors='coerce').fillna(0).round(2)
+            
+        return df_filtered.reset_index(drop=True)
+    except Exception as e:
+        # Si hay un problema de red o cambios en GitHub, devolvemos un DataFrame vacío para no inventar datos falsos
+        return pd.DataFrame()
 
-db = load_massive_fbref_database()
+df_db = load_real_fbref_data()
 
-# 3. NAVEGACIÓN LATERAL COMPLETA (CALCADA A FOOTVERSE)
+# 3. CONTROL DE BASE DE DATOS ACTIVA
+if df_db.empty:
+    st.error("⚠️ Error de conexión con el repositorio de macrodatos de FBref. Por favor, reintenta o verifica la URL.")
+    st.stop()
+
+# 4. MENU LATERAL COMPLETO
 menu = [
     "🏠 Home", "📊 Stats Dashboard", "⚖️ Player Comparison", 
     "🔍 Player Scout Report", "🧬 Player Clone", "🕵️‍♂️ Player Profiler", 
@@ -79,127 +84,136 @@ menu = [
 choice = st.sidebar.radio("Navigation", menu)
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Database Stats")
-st.sidebar.markdown(f"Total active registry: **{len(db)} Players**")
-st.sidebar.caption("Data Source: FBref & Opta Big Data Pipeline")
-st.sidebar.caption("Developed by @cdfgnz")
+st.sidebar.subheader("📊 Base de Datos Viva")
+st.sidebar.markdown(f"Registros Reales: **{len(df_db)} Futbolistas**")
+st.sidebar.caption("Fuente oficial: FBref / Opta via worldfootballR")
 
-# ==========================================
-# DESARROLLO DE LOS MÓDULOS DE LA APLICACIÓN
-# ==========================================
-
-# --- HOME ADAPTADO AL ESTILO DE TU PDF ---
-if "Home" in choice:
+# --- MÓDULO 1: HOME ---
+if choice == "🏠 Home":
     st.title("⚽ cdfelite")
-    st.markdown("##### *Unlock the Power of Football Analytics – Dive into the Numbers Behind the Game!* 📊")
+    st.markdown("##### *Advanced Football Analytics & Scouting Hub* 📊")
     st.markdown("---")
-    
-    st.subheader("🚀 Welcome to cdfelite!")
     st.write(
-        "Football isn't just a game—it's a world of numbers, patterns, and insights. "
-        "**cdfelite** brings you cutting-edge analytics, transforming raw match event data into high-fidelity "
-        "visual intelligence. Whether you are a professional coach, data analyst, scout, or a passionate fan, "
-        "this is your ultimate football data hub!"
+        "Bienvenido a la consola avanzada de inteligencia deportiva. Este panel procesa en tiempo real "
+        "las métricas de rendimiento por cada 90 minutos de juego de las principales ligas del mundo."
     )
-    
-    st.markdown("### 🔍 What You Can Do with cdfelite")
-    st.markdown("""
-    * **📊 Stats Dashboard** – Visualize top performers across global leagues and compare key performance traits.
-    * **⚖️ Player Comparison** – Compare any two players side-by-side using per 90 values or custom percentile ranks.
-    * **🔍 Player Scout Report** – View detailed statistical profiles including advanced Pizza Charts and customizable radar options.
-    * **🧬 Player Clone Engine** – Find players with statistically identical profiles based on selected spatial attributes.
-    * **🕵️‍♂️ Player Profiler** – Identify the most suitable tactical role for any player based on match performance benchmarks.
-    * **🧠 Player Performance Index** – Discover hidden gems and top talent based on curated metric score distributions.
-    * **📂 Player Screener** – Set your own custom benchmarks to instantly filter profiles matching your club's requirements.
-    """)
-    
-    st.markdown("---")
-    st.subheader("🌐 Global Database Overview")
-    st.write(f"A continuación se muestra una muestra interactiva de toda la base de datos viva (**{len(db)} registros actualmente indexados**):")
-    st.dataframe(db, use_container_width=True)
+    st.dataframe(df_db, use_container_width=True)
 
-# --- STATS DASHBOARD ---
-elif "Stats Dashboard" in choice:
+# --- MÓDULO 2: STATS DASHBOARD ---
+elif choice == "📊 Stats Dashboard":
     st.title("📊 Stats Dashboard")
-    st.write("Cruce dinámico de variables cuantitativas para la base de datos.")
+    metrics = [c for c in df_db.columns if 'p90' in c]
     
-    col_f1, col_f2 = st.columns(2)
-    with col_f1:
-        mx = st.selectbox("Métrica Eje X (Horizontal):", ["Goals p90", "Assists p90", "Shots p90", "Prog Passes p90", "Prog Carries p90"])
-    with col_f2:
-        my = st.selectbox("Métrica Eje Y (Vertical):", ["Prog Carries p90", "Prog Passes p90", "Shots p90", "Goals p90"])
+    col1, col2 = st.columns(2)
+    with col1:
+        x_axis = st.selectbox("Eje X (Métrica Horizontal):", metrics, index=0)
+    with col2:
+        y_axis = st.selectbox("Eje Y (Métrica Vertical):", metrics, index=min(1, len(metrics)-1))
         
-    fig = px.scatter(db.head(400), x=mx, y=my, text="Player", color="League", title=f"Mapa de Rendimiento de Élite: {mx} vs {my}")
-    fig.update_layout(paper_bgcolor="#0f1116", font_color="white")
+    fig = px.scatter(
+        df_db.head(500), x=x_axis, y=y_axis, text="Player", color="League" if "League" in df_db.columns else None,
+        title=f"Dispersión Exclusiva de Rendimiento: {x_axis} vs {y_axis}"
+    )
+    fig.update_layout(paper_bgcolor="#0f1116", plot_bgcolor="#161920", font_color="white")
     st.plotly_chart(fig, use_container_width=True)
 
-# --- PLAYER COMPARISON ---
-elif "Player Comparison" in choice:
+# --- MÓDULO 3: PLAYER COMPARISON (CORREGIDO SIN ERRORES DE PARÉNTESIS) ---
+elif choice == "⚖️ Player Comparison":
     st.title("⚖️ Player Comparison")
-    p1 = st.selectbox("Selecciona al Primer Jugador:", db["Player"].unique(), index=0)
-    p2 = st.selectbox("Selecciona al Segundo Jugador:", db["Player"].unique(), index=1)
     
-    comp = db[db["Player"].isin([p1, p2])]
-    st.dataframe(comp, use_container_width=True)
+    players = sorted(df_db["Player"].unique())
+    p1 = st.selectbox("Selecciona al Primer Jugador:", players, index=0)
+    p2 = st.selectbox("Selecciona al Segundo Jugador:", players, index=min(1, len(players)-1))
+    
+    comp_df = df_db[df_db["Player"].isin([p1, p2])]
+    st.dataframe(comp_df, use_container_width=True)
 
-# --- PLAYER SCOUT REPORT (PIZZA EN TIEMPO REAL SOBRE EL DATASET TOTAL) ---
-elif "Player Scout Report" in choice:
+# --- MÓDULO 4: PLAYER SCOUT REPORT (PIZZA & RADAR FIJOS Y SIN ERRORES DE SINTAXIS) ---
+elif choice == "🔍 Player Scout Report":
     st.title("🔍 Player Scout Report")
-    tgt = st.selectbox("Selecciona el jugador a analizar:", db["Player"].unique())
-    style = st.radio("Formato Visual:", ["Pizza Chart (Percentiles)", "Radar Chart (Táctico)"])
     
-    # Extraer métricas reales del jugador
-    p_data = db[db["Player"] == tgt].iloc[0]
-    metrics_keys = ["Goals p90", "Assists p90", "Shots p90", "Prog Passes p90", "Prog Carries p90"]
+    target_player = st.selectbox("Selecciona el jugador a analizar:", sorted(df_db["Player"].unique()))
+    chart_style = st.radio("Estilo de Visualización Avanzada:", ["Percentile Pizza Chart", "Tactical Radar Chart"])
     
-    # 🎯 Cálculo de percentiles reales comparando matemáticamente contra los miles de jugadores de la base de datos
-    pcts = []
-    for m in metrics_keys:
-        rank = (db[m] < p_data[m]).mean() * 100
-        pcts.append(int(max(5, rank))) # Evitamos percentil cero estricto por estética
+    player_stats = df_db[df_db["Player"] == target_player].iloc[0]
+    metrics_list = [c for c in df_db.columns if 'p90' in c]
+    
+    # Calcular percentiles exactos sobre el universo real de jugadores de la liga
+    percentiles = []
+    for m in metrics_list:
+        pct = (df_db[m] < player_stats[m]).mean() * 100
+        percentiles.append(int(max(5, pct)))
         
-    labels = ["Goals", "Assists", "Shots", "Prog Passes", "Prog Carries"]
-    color_choice = st.color_picker("Personalizar color de marca:", "#00ffcc")
+    clean_labels = [m.replace(" p90", "") for m in metrics_list]
     
-    if style == "Pizza Chart (Percentiles)":
-        baker = PyPizza(params=labels, background_color="#0f1116", straight_line_color="#2a303c", last_circle_color=color_choice)
-        fig, ax = baker.make_pizza(pcts, figsize=(6, 6), slice_colors=[color_choice]*5, value_colors=["#0f1116"]*5, value_bck_colors=[color_choice]*5, text_props=dict(color="white", fontsize=12, weight="bold"))
-        fig.text(0.5, 0.96, f"{tgt} - Percentile Profile vs Base", ha="center", color="white", fontsize=20, weight="bold")
-        fig.text(0.88, 0.95, "cdfelite", color=color_choice, fontsize=14, weight="bold", ha="right")
-        st.pyplot(fig)
-    else:
-        radar = Radar(labels, [0]*5, [100]*5)
-        fig, ax = radar.setup_axis()
-        fig.patch.set_facecolor('#0f1116')
-        ax.set_facecolor('#0f1116')
-        radar.draw_circles(ax=ax, facecolor='#161920', edgecolor='#2a303c')
-        radar.draw_radar(pcts, ax=ax, kwargs_radar={'facecolor': color_choice, 'alpha': 0.6})
-        st.pyplot(fig)
+    if len(metrics_list) > 0:
+        if chart_style == "Percentile Pizza Chart":
+            baker = PyPizza(params=clean_labels, background_color="#0f1116", straight_line_color="#2a303c", last_circle_color="#00ffcc")
+            fig, ax = baker.make_pizza(
+                percentiles, figsize=(6, 6), slice_colors=["#00ffcc"] * len(metrics_list),
+                value_colors=["#0f1116"] * len(metrics_list), value_bck_colors=["#00ffcc"] * len(metrics_list),
+                text_props=dict(color="white", fontsize=10, weight="bold")
+            )
+            st.pyplot(fig)
+        else:
+            radar = Radar(clean_labels, [0]*len(metrics_list), [100]*len(metrics_list))
+            fig, ax = radar.setup_axis()
+            fig.patch.set_facecolor('#0f1116')
+            ax.set_facecolor('#0f1116')
+            radar.draw_circles(ax=ax, facecolor='#161920', edgecolor='#2a303c')
+            radar.draw_radar(percentiles, ax=ax, kwargs_radar={'facecolor': '#00ffcc', 'alpha': 0.6})
+            st.pyplot(fig)
 
-# --- PLAYER CLONE ---
-elif "Player Clone" in choice:
+# --- MÓDULO 5: PLAYER CLONE ENGINE ---
+elif choice == "🧬 Player Clone":
     st.title("🧬 Player Clone Engine")
-    tgt = st.selectbox("Buscar gemelos estadísticos para:", db["Player"].unique())
-    st.write("Los perfiles más parecidos calculados de forma algorítmica por varianza métrica:")
-    # Muestra los jugadores más cercanos excluyendo al propio jugador consultado
-    st.dataframe(db[db["Player"] != tgt].head(5), use_container_width=True)
+    target = st.selectbox("Buscar gemelos tácticos para:", sorted(df_db["Player"].unique()))
+    
+    metrics_list = [c for c in df_db.columns if 'p90' in c]
+    target_vector = df_db[df_db["Player"] == target][metrics_list].to_numpy()
+    
+    # Cálculo de similitud por distancia euclidiana real
+    distances = []
+    for idx, row in df_db.iterrows():
+        if row["Player"] == target:
+            distances.append(float('inf'))
+        else:
+            dist = np.linalg.norm(target_vector - row[metrics_list].to_numpy())
+            distances.append(dist)
+            
+    df_db["Similarity Distance"] = distances
+    clones = df_db.sort_values(by="Similarity Distance").head(5)
+    st.dataframe(clones[["Player", "Team", "League", "Position"] + metrics_list], use_container_width=True)
 
-# --- PLAYER PROFILER ---
-elif "Player Profiler" in choice:
+# --- MÓDULO 6: PLAYER PROFILER ---
+elif choice == "🕵️‍♂️ Player Profiler":
     st.title("🕵️‍♂️ Player Profiler")
-    st.write("Segmentación y categorización de roles activos:")
-    st.dataframe(db[["Player", "Team", "Position", "League"]], use_container_width=True)
+    st.write("Segmentación posicional del universo completo indexado en FBref:")
+    st.dataframe(df_db[["Player", "Team", "Position", "League", "Age"]], use_container_width=True)
 
-# --- PLAYER PERFORMANCE INDEX ---
-elif "Player Performance Index" in choice:
+# --- MÓDULO 7: PLAYER PERFORMANCE INDEX ---
+elif choice == "🧠 Player Performance Index":
     st.title("🧠 Player Performance Index")
-    st.write("Ranking general ponderado por impacto ofensivo (Goles 50% / Asistencias 50%):")
-    db["Performance Index"] = ((db["Goals p90"] * 50) + (db["Assists p90"] * 50)).round(2)
-    st.dataframe(db[["Player", "Team", "Performance Index"]].sort_values(by="Performance Index", ascending=False), use_container_width=True)
+    st.write("Clasificación algorítmica por volumen total de aportación ofensiva en jugadas de ataque:")
+    
+    g_col = [c for c in df_db.columns if 'goal' in c.lower() or 'gls' in c.lower()][0]
+    a_col = [c for c in df_db.columns if 'assist' in c.lower() or 'ast' in c.lower()][0]
+    
+    df_db["Ataque Index"] = (df_db[g_col] * 0.6 + df_db[a_col] * 0.4).round(2)
+    ranked = df_db.sort_values(by="Ataque Index", ascending=False)
+    st.dataframe(ranked[["Player", "Team", "League", "Ataque Index"]], use_container_width=True)
 
-# --- PLAYER SCREENER ---
-elif "Player Screener" in choice:
+# --- MÓDULO 8: PLAYER SCREENER ---
+elif choice == "📂 Player Screener":
     st.title("📂 Player Screener")
-    st.write("Establece tus propios filtros para buscar talento en todo el mundo:")
-    slider_g = st.slider("Filtrar por Goles por 90 minutos mínimos:", 0.0, 1.2, 0.2)
-    st.dataframe(db[db["Goals p90"] >= slider_g], use_container_width=True)
+    st.write("Busca talento filtrando parámetros exactos de rendimiento:")
+    
+    metrics_list = [c for c in df_db.columns if 'p90' in c]
+    if metrics_list:
+        selected_m = st.selectbox("Elige la métrica de corte:", metrics_list)
+        max_val = float(df_db[selected_m].max())
+        min_val = float(df_db[selected_m].min())
+        
+        slider_val = st.slider(f"Valor mínimo de {selected_m}:", min_val, max_val, (max_val + min_val)/4)
+        filtered_df = df_db[df_db[selected_m] >= slider_val]
+        st.dataframe(filtered_df, use_container_width=True)
