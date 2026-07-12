@@ -6,11 +6,10 @@ import plotly.express as px
 from mplsoccer import Radar, PyPizza
 
 # ==========================================
-# 1. CONFIGURACIÓN Y ESTILO VISUAL AVANZADO
+# 1. CONFIGURACIÓN Y ESTILO VISUAL
 # ==========================================
 st.set_page_config(page_title="cdfelite | Football Intelligence Hub", page_icon="⚽", layout="wide")
 
-# Diseño de interfaz en Modo Oscuro Premium
 st.markdown("""
     <style>
     .stApp { background-color: #0f1116; color: #ffffff; }
@@ -33,7 +32,6 @@ st.sidebar.markdown("<h2 style='color:#00ffcc; margin-bottom:0;'>📊 cdfelite</
 st.sidebar.markdown("<p style='color:#8892b0; margin-top:0; font-size:13px;'>Advanced Analytics</p>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
-# Diccionario de navegación calcado a la imagen (sin Help)
 menu_options = {
     "🏠 Home": "Home",
     "📊 Stats Dashboard": "Stats Dashboard",
@@ -49,20 +47,20 @@ selected_icon_page = st.sidebar.radio("Navigation", list(menu_options.keys()))
 page = menu_options[selected_icon_page]
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### ☕ Support cdfelite")
-st.sidebar.link_button("🤝 Support on PayPal", "https://paypal.me/")
-st.sidebar.caption("📅 Data Source: FBref | Developed by **@cdfgnz**")
+st.sidebar.caption("📅 Data Source: Live FBref Data")
+st.sidebar.caption("🚀 Developed by @cdfgnz")
 
-# Base de datos simulada para alimentar los motores de búsqueda
+# Base de datos simulada
 @st.cache_data
 def get_mock_database():
     np.random.seed(42)
     players = ["Vinicius Jr", "Erling Haaland", "Kylian Mbappé", "Harry Kane", "Rodri", "Jude Bellingham", "Lamine Yamal", "Kevin De Bruyne"]
     teams = ["Real Madrid", "Manchester City", "Real Madrid", "Bayern Munich", "Manchester City", "Real Madrid", "Barcelona", "Manchester City"]
+    positions = ["FW", "FW", "FW", "FW", "MF", "MF", "FW", "MF"]
     data = []
-    for p, t in zip(players, teams):
+    for p, t, pos in zip(players, teams, positions):
         data.append({
-            "Player": p, "Team": t,
+            "Player": p, "Team": t, "Position": pos,
             "Goals per 90": np.random.uniform(0.1, 0.9),
             "Assists per 90": np.random.uniform(0.05, 0.5),
             "Expected Goals (xG)": np.random.uniform(0.1, 0.8),
@@ -75,7 +73,7 @@ def get_mock_database():
 df_db = get_mock_database()
 
 # ==========================================
-# 3. MÓDULOS DE LA PLATAFORMA
+# 3. INTERFAZ DE LOS MÓDULOS
 # ==========================================
 
 # --- HOME ---
@@ -95,15 +93,14 @@ if page == "Home":
         st.plotly_chart(fig_map, use_container_width=True)
     with col2:
         st.write("### 🛠️ Core Capabilities")
-        st.markdown('<div class="module-card"><h4>📊 Stats & Recruitment Space</h4><p>Multi-dimensional filtering across top tiers.</p></div>', unsafe_allow_html=True)
-        st.markdown('<div class="module-card"><h4>🧬 Mathematical Similarity Engine</h4><p>Discover identical metric profiles in seconds.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="module-card"><h4>📊 Stats Dashboard</h4><p>Visualize top performers across global football leagues.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="module-card"><h4>🔍 Player Scout Report</h4><p>Customizable Pizza Charts with your own automated watermarks.</p></div>', unsafe_allow_html=True)
 
 # --- STATS DASHBOARD ---
 elif page == "Stats Dashboard":
     st.title("📊 Stats Dashboard")
-    st.write("Compare multi-variable rankings across the database.")
     fig_scatter = px.scatter(df_db, x="Goals per 90", y="Assists per 90", text="Player", color="Team", size="Expected Goals (xG)", title="Attacking Output Analysis")
-    fig_scatter.update_layout(dark_mode=True, paper_bgcolor="#0f1116", plot_bgcolor="#161920", font_color="white")
+    fig_scatter.update_layout(paper_bgcolor="#0f1116", plot_bgcolor="#161920", font_color="white")
     st.plotly_chart(fig_scatter, use_container_width=True)
 
 # --- PLAYER COMPARISON ---
@@ -111,32 +108,4 @@ elif page == "Player Comparison":
     st.title("⚖️ Player Comparison")
     p1 = st.selectbox("Select Player 1:", df_db["Player"].unique(), index=0)
     p2 = st.selectbox("Select Player 2:", df_db["Player"].unique(), index=1)
-    st.dataframe(df_db[df_db["Player"].isin([p1, p2])], use_container_width=True)
-
-# --- PLAYER SCOUT REPORT (PIZZA & RADAR FIX) ---
-elif page == "Player Scout Report":
-    st.title("🔍 Player Scout Report")
-    
-    target_player = st.selectbox("Select Player to Analyze:", df_db["Player"].unique())
-    p_data = df_db[df_db["Player"] == target_player].iloc[0]
-    
-    col_v1, col_v2 = st.columns([1, 2])
-    with col_v1:
-        chart_style = st.radio("Visualization Style:", ["Percentile Pizza Chart", "Tactical Radar"])
-        st.markdown("### 🎨 Visual Branding Customizer")
-        accent_color = st.color_picker("Pick Main Graphic Color:", "#00ffcc")
-        text_color = st.color_picker("Pick Label Color:", "#ffffff")
-        
-    with col_v2:
-        # Mapeo limpio para evitar el bug del TypeError de PyPizza
-        raw_params = ["Goals p90", "Assists p90", "xG p90", "SCA p90", "Prog Carries", "Box Touches"]
-        # Calcular rangos simulados de percentiles basados en sus valores relativos
-        percentiles = [95, 88, 92, 85, 90, 78]
-        
-        if chart_style == "Percentile Pizza Chart":
-            baker = PyPizza(params=raw_params, background_color="#0f1116", straight_line_color="#2a303c",
-                            last_circle_color=accent_color, other_circle_color="#2a303c", inner_circle_size=5)
-            
-            fig, ax = baker.make_pizza(percentiles, figsize=(8, 8), color_blank_space="same",
-                                        slice_colors=[accent_color] * 6, value_colors=["#0f1116"] * 6,
-                                        value_bck_colors=
+    st.dataframe(df_db[df_db["Player"].isin([p1, p2])], use_container
