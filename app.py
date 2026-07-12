@@ -4,6 +4,8 @@ import numpy as np
 import plotly.express as px
 import os
 import urllib.request
+import matplotlib.pyplot as plt
+from math import pi
 
 # 1. VERIFICACIÓN DE LIBRERÍAS
 try:
@@ -134,24 +136,28 @@ elif choice == "🔍 Player Scout Report":
     p_data = df_db[df_db["Player"] == target].iloc[0]
     
     m_pizza = ['Goals p90', 'Assists p90', 'xG p90', 'SCA p90', 'Prog Carries', 'Box Touches']
+    vals = [max(0, min(100, int(float(p_data[m]) * 20))) for m in m_pizza] # Escala ajustada
     
-    vals = []
-    for m in m_pizza:
-        val_ins = float(p_data[m])
-        calculated = int(val_ins * 100) if val_ins <= 1 else int(val_ins * 10)
-        vals.append(max(0, min(100, calculated)))
+    # Radar chart nativo con matplotlib (Cero errores de memoria)
+    N = len(m_pizza)
+    angles = [n / float(N) * 2 * pi for n in range(N)]
+    vals += vals[:1]
+    angles += angles[:1]
     
-    baker = PyPizza(params=m_pizza, background_color="#161920", straight_line_color="#22252c", straight_line_lw=1, last_circle_lw=1, other_circle_lw=1, other_circle_color="#22252c")
-    
-    fig, ax = baker.make_pizza(
-        values=vals, 
-        figsize=(6, 6), 
-        slice_colors=["#00ffcc"]*6, 
-        value_colors=["#0f1116"]*6, 
-        text_props=dict(color="white", fontsize=10, weight="bold")
-    )
+    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
+    ax.set_facecolor('#0f1116')
     fig.patch.set_facecolor('#0f1116')
+    
+    plt.xticks(angles[:-1], m_pizza, color='white', size=10)
+    ax.plot(angles, vals, linewidth=2, linestyle='solid', color='#00ffcc')
+    ax.fill(angles, vals, '#00ffcc', alpha=0.3)
+    
+    ax.set_rlabel_position(0)
+    plt.yticks([25, 50, 75, 100], ["25","50","75","100"], color="grey", size=7)
+    plt.ylim(0, 100)
+    
     st.pyplot(fig)
+    plt.close(fig) # Limpieza obligatoria
 
 elif choice == "🧬 Player Clone":
     st.title("🧬 Player Clone Engine")
